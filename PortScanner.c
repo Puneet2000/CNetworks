@@ -15,8 +15,25 @@ char *protocol2 = "udp";
 
 int main(int argc , char *argv[]){
 
+	if(argc<5){
+		printf("arguments supplied are less (expected 4)\n");
+		return 1;
+	}else if (argc>5){
+		printf("arguments supplied are more (expected 4)\n");
+		return 1;
+	}
+
 	int portLow = atoi(argv[3]);
 	int portHigh = atoi(argv[4]);
+	if(portLow <1){
+		printf("port %d is not a valid port ( must be > 0)..\n",portLow);
+		return 1;
+	}
+
+	if(portHigh>65535){
+		printf("port %d is not a valid port ( must be <= 65535)..\n",portHigh);
+		return 1;
+	}
 	struct hostent* he = malloc(sizeof(struct hostent));
 	int port=0;
     int sockfd;   
