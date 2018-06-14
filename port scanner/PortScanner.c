@@ -1,17 +1,55 @@
-#include<stdio.h>
-#include<string.h>
-#include<stdlib.h>
-#include <sys/types.h>
-#include<sys/socket.h>
-#include<netdb.h>
-#include<arpa/inet.h>
-#include<netinet/in.h>
-#include <fcntl.h> 
-#include <unistd.h>
+#include "unp.h"
 #include<time.h>
 
-char *protocol1 ="tcp";
-char *protocol2 = "udp";
+const char *protocol1 ="tcp";
+const char *protocol2 = "udp";
+
+
+void send_packet(int sockfd , int port , struct hostent* he){
+  struct sockaddr_in servaddr;
+  bzero(&servaddr, sizeof(servaddr));
+  char *buf = "This is udp port scanning";
+  servaddr.sin_family = AF_INET;
+  servaddr.sin_port = htons(port);
+  servaddr.sin_addr = *((struct in_addr *)he->h_addr);
+
+  if(sendto(sockfd, buf, sizeof(buf), 0, (struct sockaddr *)&servaddr, sizeof(servaddr)) < 0)
+  {
+    printf("cant send message buffer");
+  }
+}
+
+int receive_packet(int recvfd){
+	struct ip iphdr;
+   struct timeval timeinterval;
+   timeinterval.tv_sec =1;
+   timeinterval.tv_usec =0;
+   u_char iplen;
+   struct icmp icmp;
+   char buf[4096];
+   fd_set fds;
+   while(true){
+   	FD_ZERO(&fds);
+    FD_SET(recvfd, &fds);
+
+    if(select(recvfd + 1, &fds, NULL, NULL, &timeinterval) > 0)
+    {
+      recvfrom(recvfd, &buf, sizeof(buf), 0x0, NULL, NULL);
+    }
+    else if(!FD_ISSET(recvfd, &fds))
+      return 1;
+    else
+      perror("*** recvfrom() failed ***");
+
+    iphdr = (struct ip *)buf;
+    iplen = iphdr->ip_hl << 2;
+		  
+    icmp = (struct icmp *)(buf + iplen);
+
+    if((icmp->icmp_type == ICMP_UNREACH) && (icmp->icmp_code == ICMP_UNREACH_PORT))
+      return 0;
+   }
+}
 
 int main(int argc , char *argv[]){
 
@@ -78,6 +116,36 @@ int main(int argc , char *argv[]){
 
   	}
    printf("\nscanning finished on %.24s\r\n",ctime(&ticks));
+  }
+  else if (strcmp(argv[2],protocol2)==0){
+  	int sendfd,recvfd;
+  	if((sendfd = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP)) < 0)
+	 {
+	   printf("send failed");
+	   exit(-1);
+	 }
+	 // open receive ICMP socket
+	 if((recvfd = socket(AF_INET, SOCK_RAW, IPPROTO_ICMP)) < 0)
+	 {
+	   printf("receive failed");
+	   exit(-1);
+	 }
+
+	 for(port = portLow; port <= portHigh; port++)
+  	 {
+    		send_packet(sendfd, port, he);
+
+    		if(receive_packet(recvfd) == 1)
+    		{
+		     srvport = getservbyport(htons(port), protocol2);
+
+		  if (srvport != NULL)
+		    printf("tport %d: %sn", port, srvport->s_name);
+	
+		  fflush(stdout); 
+    		}
+  	 }
+
   }
 
 return 0;
