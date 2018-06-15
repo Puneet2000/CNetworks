@@ -18,13 +18,37 @@
 #include	<unistd.h>
 #include	<sys/wait.h>
 #include	<sys/un.h>	
-#include<time.h>
 
 const char *protocol1 ="tcp";
 const char *protocol2 = "udp";
+const char *protocol3 ="stcp";
 
+void my_ip ( char * buffer)
+{
+    int sock = socket ( AF_INET, SOCK_DGRAM, 0);
+ 
+    const char* kGoogleDnsIp = "8.8.8.8";
+    int dns_port = 53;
+ 
+    struct sockaddr_in serv;
+ 
+    memset( &serv, 0, sizeof(serv) );
+    serv.sin_family = AF_INET;
+    serv.sin_addr.s_addr = inet_addr(kGoogleDnsIp);
+    serv.sin_port = htons( dns_port );
+ 
+    int err = connect( sock , (const struct sockaddr*) &serv , sizeof(serv) );
+ 
+    struct sockaddr_in name;
+    socklen_t namelen = sizeof(name);
+    err = getsockname(sock, (struct sockaddr*) &name, &namelen);
+ 
+    const char *p = inet_ntop(AF_INET, &name.sin_addr, buffer, 100);
+ 
+    close(sock);
+}
 
-void send_packet(int sockfd , int port , struct hostent* he){
+void send_udp_packet(int sockfd , int port , struct hostent* he){
   struct sockaddr_in servaddr;
   bzero(&servaddr, sizeof(servaddr));
   char *buf = "This is udp port scanning";
@@ -38,7 +62,9 @@ void send_packet(int sockfd , int port , struct hostent* he){
   }
 }
 
-int receive_packet(int recvfd){
+
+int receive_udp_packet(int recvfd){
+
 	struct ip *iphdr = malloc(sizeof(struct ip));
    struct timeval timeinterval;
    timeinterval.tv_sec =1;
@@ -47,6 +73,7 @@ int receive_packet(int recvfd){
    struct icmp *icmp = malloc(sizeof(struct icmp));
    char buf[4096];
    fd_set fds;
+
    while(1){
    	FD_ZERO(&fds);
     FD_SET(recvfd, &fds);
@@ -82,6 +109,7 @@ int main(int argc , char *argv[]){
 
 	int portLow = atoi(argv[3]);
 	int portHigh = atoi(argv[4]);
+
 	if(portLow <1){
 		printf("port %d is not a valid port ( must be > 0)..\n",portLow);
 		return 1;
@@ -91,6 +119,8 @@ int main(int argc , char *argv[]){
 		printf("port %d is not a valid port ( must be <= 65535)..\n",portHigh);
 		return 1;
 	}
+
+
 	struct hostent* he = malloc(sizeof(struct hostent));
 	int port=0;
     int sockfd;   
@@ -99,15 +129,20 @@ int main(int argc , char *argv[]){
 	time_t ticks;
 
     printf("scanning %s %s from port range %d - %d \n",argv[1],argv[2],portLow,portHigh);
+
 	if(strcmp(argv[2],protocol1)!=0 && strcmp(argv[2],protocol2)!=0){
 		printf("Invalid protocol name (only tcp or udp allowed )\n");
 		return 1;
 	}
+
+
   if((he = gethostbyname(argv[1])) == NULL)
   {
     printf("Host not found \n");
     exit(-1);
   }
+
+
   if(strcmp(argv[2],protocol1)==0){
   	ticks = time(NULL);
   	for(port = portLow ; port <=portHigh ;port++){
@@ -117,10 +152,12 @@ int main(int argc , char *argv[]){
 	    printf("Unable to open socket stream\n");
 	    exit(-1);
 	  }
+
 	  bzero(&servaddr,sizeof(servaddr));
 	  servaddr.sin_family = AF_INET;
       servaddr.sin_port = htons(port);
       servaddr.sin_addr = *((struct in_addr *)he->h_addr);
+
       if(connect(sockfd, (struct sockaddr *)&servaddr, sizeof(servaddr)) == 0)
 	  {
          srvport = getservbyport(htons(port), protocol1);
@@ -139,6 +176,7 @@ int main(int argc , char *argv[]){
   else if (strcmp(argv[2],protocol2)==0){
     ticks = time(NULL);
     int user = getuid();
+
     if(user!=0)
     {
       printf("\nrunning this scan require root privleges..\n");
@@ -147,6 +185,7 @@ int main(int argc , char *argv[]){
     }
  
   	int sendfd,recvfd;
+
   	if((sendfd = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP)) < 0)
 	 {
 	   printf("socket declaration not formed\n");
@@ -161,9 +200,9 @@ int main(int argc , char *argv[]){
 
 	 for(port = portLow; port <= portHigh; port++)
   	 {
-    		send_packet(sendfd, port, he);
+    		send_udp_packet(sendfd, port, he);
 
-    		if(receive_packet(recvfd) == 1)
+    		if(receive_udp_packet(recvfd) == 1)
     		{
 		     srvport = getservbyport(htons(port), protocol2);
 
@@ -176,6 +215,64 @@ int main(int argc , char *argv[]){
      close(sendfd);
      close(recvfd);
      printf("\nscanning finished on %.24s\r\n",ctime(&ticks));
+  }
+  else if(strcmp(argv[2],protocol3)==0){
+
+    if((sockfd = socket (AF_INET, SOCK_RAW , IPPROTO_TCP))<0){
+      printf("socket creation failed..\n");
+      return 1;
+    }
+
+    char datagram[4096];  
+    int source_port = 43591;
+    char source_ip[20];
+    my_ip( source_ip );  
+    struct iphdr *iph = (struct iphdr *) datagram;
+    struct tcphdr *tcph = (struct tcphdr *) (datagram + sizeof (struct ip));
+
+    struct sockarddr_in dest;
+
+    bzero(&dest,sizeof(dest));
+    dest.sin_family = AF_INET;
+    dest.sin_port = htons(port);
+    dest.sin_addr = *((struct in_addr *)he->h_addr);
+
+    memset (datagram, 0, 4096); 
+
+    iph->ihl = 5;
+    iph->version = 4;
+    iph->tos = 0;
+    iph->tot_len = sizeof (struct ip) + sizeof (struct tcphdr);
+    iph->id = htons (54321);
+    iph->frag_off = htons(16384);
+    iph->ttl = 64;
+    iph->protocol = IPPROTO_TCP;
+    iph->check = 0;   
+    iph->saddr = inet_addr ( source_ip );   
+    iph->daddr = dest.sin_addr;
+    iph->check = csum ((unsigned short *) datagram, iph->tot_len >> 1);
+  
+    tcph->source = htons ( source_port );
+    tcph->dest = htons (80);
+    tcph->seq = htonl(1105024978);
+    tcph->ack_seq = 0;
+    tcph->doff = sizeof(struct tcphdr) / 4; 
+    tcph->fin=0;
+    tcph->syn=1;
+    tcph->rst=0;
+    tcph->psh=0;
+    tcph->ack=0;
+    tcph->urg=0;
+    tcph->window = htons ( 14600 ); 
+    tcph->check = 0; 
+    tcph->urg_ptr = 0;
+
+
+     
+
+  }
+  else {
+    printf("invalid protocol type reffered (udp/tcp expected)..\n")
   }
 
 return 0;
