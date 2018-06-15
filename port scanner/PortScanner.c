@@ -1,4 +1,23 @@
-#include "unp.h"
+#include	<sys/types.h>	/* basic system data types */
+#include	<sys/socket.h>	/* basic socket definitions */
+#include	<sys/time.h>	/* timeval{} for select() */
+#include	<time.h>		/* timespec{} for pselect() */
+#include	<netinet/in.h>
+#include  <netinet/ip.h>
+#include  <netinet/ip_icmp.h>	/* sockaddr_in{} and other Internet defns */
+#include	<arpa/inet.h>	/* inet(3) functions */
+#include	<errno.h>
+#include	<fcntl.h>		/* for nonblocking */
+#include	<netdb.h>
+#include	<signal.h>
+#include	<stdio.h>
+#include	<stdlib.h>
+#include	<string.h>
+#include	<sys/stat.h>	/* for S_xxx file mode constants */
+#include	<sys/uio.h>		/* for iovec{} and readv/writev */
+#include	<unistd.h>
+#include	<sys/wait.h>
+#include	<sys/un.h>	
 #include<time.h>
 
 const char *protocol1 ="tcp";
@@ -20,15 +39,15 @@ void send_packet(int sockfd , int port , struct hostent* he){
 }
 
 int receive_packet(int recvfd){
-	struct ip iphdr;
+	struct ip *iphdr = malloc(sizeof(struct ip));
    struct timeval timeinterval;
    timeinterval.tv_sec =1;
    timeinterval.tv_usec =0;
    u_char iplen;
-   struct icmp icmp;
+   struct icmp *icmp = malloc(sizeof(struct icmp));
    char buf[4096];
    fd_set fds;
-   while(true){
+   while(1){
    	FD_ZERO(&fds);
     FD_SET(recvfd, &fds);
 
@@ -121,13 +140,13 @@ int main(int argc , char *argv[]){
   	int sendfd,recvfd;
   	if((sendfd = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP)) < 0)
 	 {
-	   printf("send failed");
+	   printf("send failed\n");
 	   exit(-1);
 	 }
 	 // open receive ICMP socket
 	 if((recvfd = socket(AF_INET, SOCK_RAW, IPPROTO_ICMP)) < 0)
 	 {
-	   printf("receive failed");
+	   printf("receive failed\n");
 	   exit(-1);
 	 }
 
@@ -140,7 +159,7 @@ int main(int argc , char *argv[]){
 		     srvport = getservbyport(htons(port), protocol2);
 
 		  if (srvport != NULL)
-		    printf("tport %d: %sn", port, srvport->s_name);
+		    printf("tport %d: %s\n", port, srvport->s_name);
 	
 		  fflush(stdout); 
     		}
