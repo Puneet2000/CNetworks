@@ -137,17 +137,26 @@ int main(int argc , char *argv[]){
    printf("\nscanning finished on %.24s\r\n",ctime(&ticks));
   }
   else if (strcmp(argv[2],protocol2)==0){
+    ticks = time(NULL);
+    int user = getuid();
+    if(user!=0)
+    {
+      printf("\nrunning this scan require root privleges..\n");
+      return 1;
+
+    }
+ 
   	int sendfd,recvfd;
   	if((sendfd = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP)) < 0)
 	 {
-	   printf("send failed\n");
-	   exit(-1);
+	   printf("socket declaration not formed\n");
+	   return 1;
 	 }
 	 // open receive ICMP socket
 	 if((recvfd = socket(AF_INET, SOCK_RAW, IPPROTO_ICMP)) < 0)
 	 {
-	   printf("receive failed\n");
-	   exit(-1);
+	   printf("socket declaration failed\n");
+	   return 1;
 	 }
 
 	 for(port = portLow; port <= portHigh; port++)
@@ -164,7 +173,9 @@ int main(int argc , char *argv[]){
 		  fflush(stdout); 
     		}
   	 }
-
+     close(sendfd);
+     close(recvfd);
+     printf("\nscanning finished on %.24s\r\n",ctime(&ticks));
   }
 
 return 0;
