@@ -19,9 +19,22 @@
 #include	<sys/wait.h>
 #include	<sys/un.h>	
 
+
 const char *protocol1 ="tcp";
 const char *protocol2 = "udp";
 const char *protocol3 ="stcp";
+
+struct pseudo_header    //needed for checksum calculation
+{
+    unsigned int source_address;
+    unsigned int dest_address;
+    unsigned char placeholder;
+    unsigned char protocol;
+    unsigned short tcp_length;
+     
+    struct tcphdr tcp;
+};
+
 
 unsigned short csum(unsigned short *ptr,int nbytes) 
 {
@@ -119,6 +132,66 @@ int receive_udp_packet(int recvfd){
     if((icmp->icmp_type == ICMP_UNREACH) && (icmp->icmp_code == ICMP_UNREACH_PORT))
       return 0;
    }
+}
+
+int receive_ack_packet(int recvfd){
+  struct timeval timeinterval;
+  struct sockaddr saddr;
+   timeinterval.tv_sec =1;
+   timeinterval.tv_usec =0;
+   fd_set fds;
+   int data_s,saddr_s;
+   saddr_s = sizeof(saddr);
+  unsigned char *buffer = (unsigned char *)malloc(65536);
+   while(1){
+    FD_ZERO(&fds);
+    FD_SET(recvfd, &fds);
+
+    if(select(recvfd + 1, &fds, NULL, NULL, &timeinterval) > 0)
+    {
+      data_s = recvfrom(recvfd , buffer , 65536 , 0 , &saddr , &saddr_s);
+      if(data_s <0 )
+        {
+            printf("Recvfrom error , failed to get packets\n");
+            fflush(stdout);
+            return 0;
+        }
+    }
+    else if(FD_ISSET(recvfd, &fds)){
+      printf("error in fdset\n");
+      return 0;
+    }
+
+    struct iphdr *iph = (struct iphdr*)buffer;
+    struct sockaddr_in source,dest;
+    unsigned short iphdrlen;
+     
+    if(iph->protocol == 6)
+    {
+        struct iphdr *iph = (struct iphdr *)buffer;
+        iphdrlen = iph->ihl*4;
+     
+        struct tcphdr *tcph=(struct tcphdr*)(buffer + iphdrlen);
+             
+        memset(&source, 0, sizeof(source));
+        source.sin_addr.s_addr = iph->saddr;
+     
+        memset(&dest, 0, sizeof(dest));
+        dest.sin_addr.s_addr = iph->daddr;
+         
+        if(tcph->syn == 1 && tcph->ack == 1 && source.sin_addr.s_addr == dest_ip.s_addr )
+        {
+            return 1;
+        }
+        else{
+          return 0;
+        }
+    }
+    else return 0;
+
+   
+   }
+
 }
 
 int main(int argc , char *argv[]){
@@ -253,7 +326,8 @@ int main(int argc , char *argv[]){
     my_ip( source_ip );  
     struct iphdr *iph = (struct iphdr *) datagram;
     struct tcphdr *tcph = (struct tcphdr *) (datagram + sizeof (struct ip));
-
+    struct pseudo_header psh;
+    int recvfd;
     struct sockarddr_in dest;
 
     bzero(&dest,sizeof(dest));
@@ -295,7 +369,32 @@ int main(int argc , char *argv[]){
 
       tcph->dest = htons ( port );
       tcph->check = 0; 
+      psh.source_address = inet_addr( source_ip );
+      psh.dest_address = dest.sin_addr.s_addr;
+      psh.placeholder = 0;
+      psh.protocol = IPPROTO_TCP;
+      psh.tcp_length = htons( sizeof(struct tcphdr) );
+         
+      memcpy(&psh.tcp , tcph , sizeof (struct tcphdr));
+         
+      tcph->check = csum( (unsigned short*) &psh , sizeof (struct pseudo_header));
+         
+        //Send the packet
+      if ( sendto (sockfd, datagram , sizeof(struct iphdr) + sizeof(struct tcphdr) , 0 , (struct sockaddr *) &dest, sizeof (dest)) < 0)
+        {
+            printf ("Error sending syn packet. Error number : %d . Error message : %s \n" , errno , strerror(errno));
+            return 1;
+        }
 
+      if(receive_ack_packet(recvfd) == 1)
+        {
+         srvport = getservbyport(htons(port), protocol2);
+
+      if (srvport != NULL)
+        printf("tport %d: %s\n", port, srvport->s_name);
+  
+      fflush(stdout); 
+        }
          
 
     }
