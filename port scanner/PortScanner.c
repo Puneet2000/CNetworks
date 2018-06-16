@@ -23,6 +23,30 @@ const char *protocol1 ="tcp";
 const char *protocol2 = "udp";
 const char *protocol3 ="stcp";
 
+unsigned short csum(unsigned short *ptr,int nbytes) 
+{
+    register long sum;
+    unsigned short oddbyte;
+    register short answer;
+ 
+    sum=0;
+    while(nbytes>1) {
+        sum+=*ptr++;
+        nbytes-=2;
+    }
+    if(nbytes==1) {
+        oddbyte=0;
+        *((u_char*)&oddbyte)=*(u_char*)ptr;
+        sum+=oddbyte;
+    }
+ 
+    sum = (sum>>16)+(sum & 0xffff);
+    sum = sum + (sum>>16);
+    answer=(short)~sum;
+     
+    return(answer);
+}
+
 void my_ip ( char * buffer)
 {
     int sock = socket ( AF_INET, SOCK_DGRAM, 0);
@@ -266,6 +290,15 @@ int main(int argc , char *argv[]){
     tcph->window = htons ( 14600 ); 
     tcph->check = 0; 
     tcph->urg_ptr = 0;
+
+    for(port = portLow ; port<=portHigh ;port++){
+
+      tcph->dest = htons ( port );
+      tcph->check = 0; 
+
+         
+
+    }
 
 
      
