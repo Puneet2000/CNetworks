@@ -3,6 +3,7 @@
 #include	<sys/time.h>	/* timeval{} for select() */
 #include	<time.h>		/* timespec{} for pselect() */
 #include	<netinet/in.h>
+#include  <netinet/tcp.h>
 #include  <netinet/ip.h>
 #include  <netinet/ip_icmp.h>	/* sockaddr_in{} and other Internet defns */
 #include	<arpa/inet.h>	/* inet(3) functions */
@@ -22,8 +23,9 @@
 
 const char *protocol1 ="tcp";
 const char *protocol2 = "udp";
-const char *protocol3 ="stcp";
+const char *protocol3 = "stcp";
 
+struct in_addr dest_ip;
 struct pseudo_header    //needed for checksum calculation
 {
     unsigned int source_address;
@@ -59,6 +61,7 @@ unsigned short csum(unsigned short *ptr,int nbytes)
      
     return(answer);
 }
+
 
 void my_ip ( char * buffer)
 {
@@ -134,14 +137,21 @@ int receive_udp_packet(int recvfd){
    }
 }
 
-int receive_ack_packet(int recvfd){
+int receive_ack_packet(){
+  int recvfd;
+
+     if((recvfd = socket (AF_INET, SOCK_RAW , IPPROTO_TCP))<0){
+      printf("socket creation failed..\n");
+      return 1;
+    }
   struct timeval timeinterval;
   struct sockaddr saddr;
-   timeinterval.tv_sec =1;
+   timeinterval.tv_sec =2;
    timeinterval.tv_usec =0;
    fd_set fds;
    int data_s,saddr_s;
    saddr_s = sizeof(saddr);
+   int count =0;
   unsigned char *buffer = (unsigned char *)malloc(65536);
    while(1){
     FD_ZERO(&fds);
@@ -154,20 +164,17 @@ int receive_ack_packet(int recvfd){
         {
             printf("Recvfrom error , failed to get packets\n");
             fflush(stdout);
+            close(recvfd);
             return 0;
         }
-    }
-    else if(FD_ISSET(recvfd, &fds)){
-      printf("error in fdset\n");
-      return 0;
-    }
 
-    struct iphdr *iph = (struct iphdr*)buffer;
-    struct sockaddr_in source,dest;
+        struct iphdr *iph = (struct iphdr*)buffer;
+    struct sockaddr_in source;
     unsigned short iphdrlen;
      
     if(iph->protocol == 6)
     {
+        
         struct iphdr *iph = (struct iphdr *)buffer;
         iphdrlen = iph->ihl*4;
      
@@ -175,19 +182,34 @@ int receive_ack_packet(int recvfd){
              
         memset(&source, 0, sizeof(source));
         source.sin_addr.s_addr = iph->saddr;
-     
-        memset(&dest, 0, sizeof(dest));
-        dest.sin_addr.s_addr = iph->daddr;
          
-        if(tcph->syn == 1 && tcph->ack == 1 && source.sin_addr.s_addr == dest_ip.s_addr )
-        {
+        if((tcph->syn == 1 && tcph->ack == 1) && source.sin_addr.s_addr == dest_ip.s_addr )
+        { 
+            close(recvfd);
             return 1;
         }
         else{
+          close(recvfd);
           return 0;
         }
     }
-    else return 0;
+    else {
+      close(recvfd);
+      return 0;
+    }
+
+    }
+    else if(FD_ISSET(recvfd, &fds)){
+      printf("error in fdset\n");
+      close(recvfd);
+      return 0;
+    }else {
+      close(recvfd);
+        return 0;
+    }
+ 
+
+    
 
    
    }
@@ -220,14 +242,15 @@ int main(int argc , char *argv[]){
 
 	struct hostent* he = malloc(sizeof(struct hostent));
 	int port=0;
-    int sockfd;   
-    struct sockaddr_in servaddr;
+  int sockfd;   
+   struct sockaddr_in servaddr;
+  struct sockaddr_in dest;
 	struct servent *srvport=malloc(sizeof(struct servent));
 	time_t ticks;
 
     printf("scanning %s %s from port range %d - %d \n",argv[1],argv[2],portLow,portHigh);
 
-	if(strcmp(argv[2],protocol1)!=0 && strcmp(argv[2],protocol2)!=0){
+	if(strcmp(argv[2],protocol1)!=0 && strcmp(argv[2],protocol2)!=0 && strcmp(argv[2],protocol3)!=0){
 		printf("Invalid protocol name (only tcp or udp allowed )\n");
 		return 1;
 	}
@@ -314,11 +337,8 @@ int main(int argc , char *argv[]){
      printf("\nscanning finished on %.24s\r\n",ctime(&ticks));
   }
   else if(strcmp(argv[2],protocol3)==0){
-
-    if((sockfd = socket (AF_INET, SOCK_RAW , IPPROTO_TCP))<0){
-      printf("socket creation failed..\n");
-      return 1;
-    }
+    ticks = time(NULL);
+   
 
     char datagram[4096];  
     int source_port = 43591;
@@ -327,13 +347,19 @@ int main(int argc , char *argv[]){
     struct iphdr *iph = (struct iphdr *) datagram;
     struct tcphdr *tcph = (struct tcphdr *) (datagram + sizeof (struct ip));
     struct pseudo_header psh;
-    int recvfd;
-    struct sockarddr_in dest;
 
-    bzero(&dest,sizeof(dest));
-    dest.sin_family = AF_INET;
-    dest.sin_port = htons(port);
-    dest.sin_addr = *((struct in_addr *)he->h_addr);
+     if((sockfd = socket (AF_INET, SOCK_RAW , IPPROTO_TCP))<0){
+      printf(" send socket creation failed..\n");
+      return 1;
+    }
+
+  
+      bzero(&dest,sizeof(dest));
+      dest.sin_family = AF_INET;
+      dest.sin_addr = *((struct in_addr *)he->h_addr);
+      dest_ip.s_addr = dest.sin_addr.s_addr;
+      printf("%d\n",dest_ip.s_addr);
+   
 
     memset (datagram, 0, 4096); 
 
@@ -347,7 +373,7 @@ int main(int argc , char *argv[]){
     iph->protocol = IPPROTO_TCP;
     iph->check = 0;   
     iph->saddr = inet_addr ( source_ip );   
-    iph->daddr = dest.sin_addr;
+    iph->daddr = dest.sin_addr.s_addr;
     iph->check = csum ((unsigned short *) datagram, iph->tot_len >> 1);
   
     tcph->source = htons ( source_port );
@@ -366,6 +392,8 @@ int main(int argc , char *argv[]){
     tcph->urg_ptr = 0;
 
     for(port = portLow ; port<=portHigh ;port++){
+
+      
 
       tcph->dest = htons ( port );
       tcph->check = 0; 
@@ -386,7 +414,7 @@ int main(int argc , char *argv[]){
             return 1;
         }
 
-      if(receive_ack_packet(recvfd) == 1)
+      if(receive_ack_packet() == 1)
         {
          srvport = getservbyport(htons(port), protocol2);
 
@@ -400,11 +428,11 @@ int main(int argc , char *argv[]){
     }
 
 
-     
+    printf("\nscanning finished on %.24s\r\n",ctime(&ticks)); 
 
   }
   else {
-    printf("invalid protocol type reffered (udp/tcp expected)..\n")
+    printf("invalid protocol type reffered (udp/tcp expected)..\n");
   }
 
 return 0;
