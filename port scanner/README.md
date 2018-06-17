@@ -24,3 +24,5 @@
 ### Refrences :
 - UNIX network Programming by W.Richard Stevens Volume 1.
 
+**Note** : For UDP and TCP SYN Scanning you need to have root access. No worry if not the program with inform you about this via a prompt.
+
