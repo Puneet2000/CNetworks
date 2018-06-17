@@ -1,31 +1,32 @@
-#include	<sys/types.h>	/* basic system data types */
-#include	<sys/socket.h>	/* basic socket definitions */
-#include	<sys/time.h>	/* timeval{} for select() */
-#include	<time.h>		/* timespec{} for pselect() */
+#include	<sys/types.h>	
+#include	<sys/socket.h>	
+#include	<sys/time.h>	
+#include	<time.h>	
 #include	<netinet/in.h>
 #include  <netinet/tcp.h>
 #include  <netinet/ip.h>
-#include  <netinet/ip_icmp.h>	/* sockaddr_in{} and other Internet defns */
-#include	<arpa/inet.h>	/* inet(3) functions */
+#include  <netinet/ip_icmp.h>	
+#include	<arpa/inet.h>	
 #include	<errno.h>
-#include	<fcntl.h>		/* for nonblocking */
+#include	<fcntl.h>		
 #include	<netdb.h>
 #include	<signal.h>
 #include	<stdio.h>
 #include	<stdlib.h>
 #include	<string.h>
-#include	<sys/stat.h>	/* for S_xxx file mode constants */
-#include	<sys/uio.h>		/* for iovec{} and readv/writev */
+#include	<sys/stat.h>	
+#include	<sys/uio.h>		
 #include	<unistd.h>
 #include	<sys/wait.h>
 #include	<sys/un.h>	
 
-
+// types of scan 
 const char *protocol1 ="tcp";
 const char *protocol2 = "udp";
 const char *protocol3 = "stcp";
 
 struct in_addr dest_ip;
+
 struct pseudo_header    //needed for checksum calculation
 {
     unsigned int source_address;
@@ -37,8 +38,7 @@ struct pseudo_header    //needed for checksum calculation
     struct tcphdr tcp;
 };
 
-
-unsigned short csum(unsigned short *ptr,int nbytes) 
+unsigned short csum(unsigned short *ptr,int nbytes) // checksum function
 {
     register long sum;
     unsigned short oddbyte;
@@ -63,7 +63,7 @@ unsigned short csum(unsigned short *ptr,int nbytes)
 }
 
 
-void my_ip ( char * buffer)
+void my_ip ( char * buffer)   // get the local ip 
 {
     int sock = socket ( AF_INET, SOCK_DGRAM, 0);
  
@@ -88,6 +88,8 @@ void my_ip ( char * buffer)
     close(sock);
 }
 
+// sending udp packets for udp scanning
+
 void send_udp_packet(int sockfd , int port , struct hostent* he){
   struct sockaddr_in servaddr;
   bzero(&servaddr, sizeof(servaddr));
@@ -102,6 +104,7 @@ void send_udp_packet(int sockfd , int port , struct hostent* he){
   }
 }
 
+// receiving udp packets and analysing them
 
 int receive_udp_packet(int recvfd){
 
@@ -122,7 +125,7 @@ int receive_udp_packet(int recvfd){
     {
       recvfrom(recvfd, &buf, sizeof(buf), 0x0, NULL, NULL);
     }
-    else if(!FD_ISSET(recvfd, &fds))
+    else if(!FD_ISSET(recvfd, &fds))   // no response : that means port is open
       return 1;
     else
       perror("*** recvfrom() failed ***");
@@ -132,10 +135,12 @@ int receive_udp_packet(int recvfd){
 		  
     icmp = (struct icmp *)(buf + iplen);
 
-    if((icmp->icmp_type == ICMP_UNREACH) && (icmp->icmp_code == ICMP_UNREACH_PORT))
+    if((icmp->icmp_type == ICMP_UNREACH) && (icmp->icmp_code == ICMP_UNREACH_PORT))  
       return 0;
    }
 }
+
+// receive ack and syn packets for tcp syn scanning
 
 int receive_ack_packet(){
   int recvfd;
@@ -159,7 +164,7 @@ int receive_ack_packet(){
 
     if(select(recvfd + 1, &fds, NULL, NULL, &timeinterval) > 0)
     {
-      data_s = recvfrom(recvfd , buffer , 65536 , 0 , &saddr , &saddr_s);
+      data_s = recvfrom(recvfd , buffer , 65536 , 0 , &saddr , &saddr_s);  // receiving packet
       if(data_s <0 )
         {
             printf("Recvfrom error , failed to get packets\n");
@@ -183,7 +188,7 @@ int receive_ack_packet(){
         memset(&source, 0, sizeof(source));
         source.sin_addr.s_addr = iph->saddr;
          
-        if((tcph->syn == 1 && tcph->ack == 1) && source.sin_addr.s_addr == dest_ip.s_addr )
+        if((tcph->syn == 1 && tcph->ack == 1) && source.sin_addr.s_addr == dest_ip.s_addr )  // if tcp header has both ack and syn then port is open
         { 
             close(recvfd);
             return 1;
@@ -207,11 +212,7 @@ int receive_ack_packet(){
       close(recvfd);
         return 0;
     }
- 
 
-    
-
-   
    }
 
 }
@@ -256,14 +257,15 @@ int main(int argc , char *argv[]){
 	}
 
 
-  if((he = gethostbyname(argv[1])) == NULL)
+  if((he = gethostbyname(argv[1])) == NULL)   // find the host checkn if target ip is valid
   {
     printf("Host not found \n");
     exit(-1);
   }
 
 
-  if(strcmp(argv[2],protocol1)==0){
+  if(strcmp(argv[2],protocol1)==0){   // tcp connect scan
+
   	ticks = time(NULL);
   	for(port = portLow ; port <=portHigh ;port++){
 
@@ -273,16 +275,16 @@ int main(int argc , char *argv[]){
 	    exit(-1);
 	  }
 
-	  bzero(&servaddr,sizeof(servaddr));
+	  bzero(&servaddr,sizeof(servaddr));         // adding target information
 	  servaddr.sin_family = AF_INET;
       servaddr.sin_port = htons(port);
       servaddr.sin_addr = *((struct in_addr *)he->h_addr);
 
-      if(connect(sockfd, (struct sockaddr *)&servaddr, sizeof(servaddr)) == 0)
+      if(connect(sockfd, (struct sockaddr *)&servaddr, sizeof(servaddr)) == 0)       // port is open
 	  {
          srvport = getservbyport(htons(port), protocol1);
 
-	    if(srvport != NULL)
+	    if(srvport != NULL)                               
 		printf("tport %d: %s\n", port, srvport->s_name);
 
 	    fflush(stdout); 
@@ -293,9 +295,9 @@ int main(int argc , char *argv[]){
   	}
    printf("\nscanning finished on %.24s\r\n",ctime(&ticks));
   }
-  else if (strcmp(argv[2],protocol2)==0){
+  else if (strcmp(argv[2],protocol2)==0){  // udp scanning
     ticks = time(NULL);
-    int user = getuid();
+    int user = getuid();  // check if scan has root access or not
 
     if(user!=0)
     {
@@ -336,7 +338,16 @@ int main(int argc , char *argv[]){
      close(recvfd);
      printf("\nscanning finished on %.24s\r\n",ctime(&ticks));
   }
-  else if(strcmp(argv[2],protocol3)==0){
+  else if(strcmp(argv[2],protocol3)==0){ // tcp syn scan
+
+    int user = getuid();  // check if scan has root access or not
+
+    if(user!=0)
+    {
+      printf("\nrunning this scan require root privleges..\n");
+      return 1;
+
+    }
     ticks = time(NULL);
    
 
@@ -363,7 +374,7 @@ int main(int argc , char *argv[]){
 
     memset (datagram, 0, 4096); 
 
-    iph->ihl = 5;
+    iph->ihl = 5;           // setting ip headers
     iph->version = 4;
     iph->tos = 0;
     iph->tot_len = sizeof (struct ip) + sizeof (struct tcphdr);
@@ -374,9 +385,9 @@ int main(int argc , char *argv[]){
     iph->check = 0;   
     iph->saddr = inet_addr ( source_ip );   
     iph->daddr = dest.sin_addr.s_addr;
-    iph->check = csum ((unsigned short *) datagram, iph->tot_len >> 1);
+    iph->check = csum ((unsigned short *) datagram, iph->tot_len >> 1); // calculating checksum
   
-    tcph->source = htons ( source_port );
+    tcph->source = htons ( source_port );      // setting tcp header info
     tcph->dest = htons (80);
     tcph->seq = htonl(1105024978);
     tcph->ack_seq = 0;
@@ -414,7 +425,7 @@ int main(int argc , char *argv[]){
             return 1;
         }
 
-      if(receive_ack_packet() == 1)
+      if(receive_ack_packet() == 1)  // syn and ack packet received
         {
          srvport = getservbyport(htons(port), protocol2);
 
@@ -432,7 +443,7 @@ int main(int argc , char *argv[]){
 
   }
   else {
-    printf("invalid protocol type reffered (udp/tcp expected)..\n");
+    printf("invalid protocol type reffered (udp/tcp expected)..\n");  // incvalid protocol mentioned
   }
 
 return 0;
