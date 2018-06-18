@@ -58,5 +58,20 @@ int tun_write(int fd , char *buf , int n){
 	return bytewritten;
 }
  int main(int argc , char *argv[]){
+ 	int tapfd , option;
+ 	int flags = IFF_TUN;
+ 	int maxfd;
+ 	char targetip[20]="";
+ 	uint16_t byteread, bytewritten , length;
+ 	char buffer[BUFSIZE];
+ 	struct sockaddr_in local , target;
+ 	int port = PORT;
+ 	int sockfd, netfd , optval=1;
+ 	socklen_t targetlen;
+ 	long int tap2net=0 , net2tap=0;
+
+ 	
+
+
  	return 0;
  }
