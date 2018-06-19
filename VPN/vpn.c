@@ -15,35 +15,43 @@
 #include <errno.h>
 #include <stdarg.h>
 
-const char *addr = "/dev/net/tun";
-const int SERVER =0;
-const int CLIENT =1;
-const int PORT = 5555;
-const int BUFSIZE = 2000;
+#define BUFSIZE 2000   
+#define CLIENT 0
+#define SERVER 1
+#define PORT 55555
+
 int max(int a , int b){
 	return a>b?a:b;
 }
 
-int tun_alloc(){
-	struct ifreq ifr;
-	int tunfd ,e;
+int tun_alloc(char *dev, int flags) {
 
-	if((tunfd = open(addr,O_RDWR))<0){
-		printf("Cannot open /dev/net/tun\n");
-		exit(0);
-	}
+  struct ifreq ifr;
+  int fd, err;
+  char *clonedev = "/dev/net/tun";
 
-	memset(&ifr ,0,sizeof(ifr));
-	ifr.ifr_flags = IFF_TUN | IFF_NO_PI;
+  if( (fd = open(clonedev , O_RDWR)) < 0 ) {
+    perror("Opening /dev/net/tun");
+    return fd;
+  }
 
-	strncpy(ifr.ifr_name,"tun0",IFNAMSIZ);
+  memset(&ifr, 0, sizeof(ifr));
 
-	if((e= ioctl(tunfd,TUNSETIFF,(void *)&ifr))<0){
-		printf("ioctl() error\n");
-		exit(0);
-	}
+  ifr.ifr_flags = flags;
 
-	return tunfd;
+  if (*dev) {
+    strncpy(ifr.ifr_name, dev, IFNAMSIZ);
+  }
+
+  if( (err = ioctl(fd, TUNSETIFF, (void *)&ifr)) < 0 ) {
+    perror("ioctl(TUNSETIFF)");
+    close(fd);
+    return err;
+  }
+
+  strcpy(dev, ifr.ifr_name);
+
+  return fd;
 }
 
 int tun_read(int fd, char *buf , int n){
@@ -107,6 +115,13 @@ int tun_write(int fd , char *buf , int n){
  		}
  	}
 
+ 	argv += optind;
+    argc -= optind;
+    if(argc > 0) {
+    printf("Too many options!\n");
+    exit(1);
+      }
+
 	if(*interface_name =='\0'){
 		printf("must specify interface name\n");
 		return 1;
@@ -119,14 +134,14 @@ int tun_write(int fd , char *buf , int n){
 	}
 
 	if ((tapfd = tun_alloc(interface_name,flags | IFF_NO_PI))<0){
-		printf("error creating interface\n");
+		perror("error creating interface : ");
 		exit(0);
 	}
 
 	printf("successfully connected to interface %s\n",interface_name);
 
-	if((sockfd==socket(AF_INET,SOCK_STREAM,0))<0){
-		printf("socket error\n");
+	if((sockfd==socket(PF_INET,SOCK_STREAM,0))<0){
+		perror("socket error : ");
 		return 1;
 	}
 
@@ -137,7 +152,7 @@ int tun_write(int fd , char *buf , int n){
 		target.sin_port = htons(port);
 
 		if(connect(sockfd,(struct sockaddr*)&target,sizeof(target))<0){
-			printf("connection error\n");
+			perror("connection error : ");
 			return 1;
 		}
 
@@ -145,10 +160,10 @@ int tun_write(int fd , char *buf , int n){
 		printf("client connected to server\n");
 
 	}else if (clientorserver==SERVER){
-		if(setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, (char *)&optval, sizeof(optval)) < 0) {
-      perror("setsockopt()");
-      exit(1);
-    }
+		if (setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &(int){ 1 }, sizeof(int)) < 0){
+               perror("setsockopt() :");
+                  exit(1);
+}
 
 		
 		memset(&local,0,sizeof(local));
@@ -157,18 +172,18 @@ int tun_write(int fd , char *buf , int n){
 		local.sin_port = htons(port);
 
 		if(bind(sockfd ,(struct sockaddr*) &local,sizeof(local))<0){
-			printf("socket bind error\n");
+			perror("bind error : ");
 			return 1;
 		}
 
 		if(listen(sockfd,5)<0){
-			printf("listen error\n");
+			perror("listen error : ");
 			return 1;
 		}
 		targetlen = sizeof(target);
 		memset(&target ,0, targetlen);
 		if((netfd = accept(sockfd,(struct sockaddr*)&target,&targetlen))<0){
-			printf("error in accept()\n");
+			perror("error in accept() : ");
 			exit(1);
 		}
 
