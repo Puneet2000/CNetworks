@@ -19,6 +19,9 @@
 #define CLIENT 0
 #define SERVER 1
 #define PORT 55555
+#define IP_LEN 60
+
+
 
 int max(int a , int b){
 	return a>b ? a:b;
@@ -91,12 +94,56 @@ int vpn_read_n(int fd, char *buf, int n) {
   return n;  
 }
 
+void setip(int fd , char ip[]){
+	struct ifreq ifr;
+	struct sockaddr_in addr;
+	int stat,s;
+
+	memset(&ifr,0,sizeof(ifr));
+	memset(&addr,0,sizeof(addr));
+	strncpy(ifr.ifr_name,ip,IFNAMSIZ);
+
+	addr.sin_family = AF_INET;
+	s = socket(addr.sin_family,SOCK_STREAM,0);
+	stat = inet_pton(addr.sin_family,ip,&addr.sin_addr);
+	if(stat==0)
+		{
+			printf("inet_pton() - invalid ip");
+			exit(1);
+		}
+	if(stat ==-1){
+		printf("invalid family");
+		exit(1);
+	}
+
+	if(stat==1);
+	else
+	{
+		printf("inet_pton()");
+		exit(1);
+	}
+
+	ifr.ifr_addr = *(struct sockaddr *)&addr;
+	char buff[BUFSIZE];
+	char *foo;
+	foo = inet_ntop(AF_INET,&addr.sin_addr,buff,BUFSIZE);
+	if(foo ==NULL){
+		printf("inet_ntop()");
+		exit(1);
+	}else{
+		printf("main = %s, addr = %s\n",ip, buff);
+		 if (ioctl(s, SIOCSIFADDR, (caddr_t) &ifr) == -1)
+        perror("ioctl() - SIOCSIFADDR");
+        exit(1);
+	}}
+
 int main(int argc, char *argv[]) {
   
   int tapfd, option;
   int flags = IFF_TUN;
   char if_name[IFNAMSIZ] = "";
   int maxfd;
+  char ip[IP_LEN];
   uint16_t byteread, bytewritten, length;
   char buffer[BUFSIZE];
   struct sockaddr_in local, target;
@@ -107,7 +154,7 @@ int main(int argc, char *argv[]) {
   int clientorserver = -1;    
   unsigned long int tap2net = 0, net2tap = 0;
 
-  while((option = getopt(argc, argv, "i:sc:p:ua")) > 0) {
+  while((option = getopt(argc, argv, "i:sc:p:uan:")) > 0) {
     switch(option) {
       case 'i':
         strncpy(if_name,optarg, IFNAMSIZ-1);
@@ -128,6 +175,9 @@ int main(int argc, char *argv[]) {
       case 'a':
         flags = IFF_TAP;
         break;
+       case 'n':
+       	strncpy(ip,optarg,IP_LEN-1);
+       	break;
       default:
         printf("Unknown option %c\n", option);
         exit(1);
@@ -158,8 +208,10 @@ int main(int argc, char *argv[]) {
     printf("Error connecting to tun/tap interface %s!\n", if_name);
     exit(1);
   }
-
+ 
+  setip(tapfd);
 printf("Successfully connected to interface %s\n", if_name);
+
 
   if ( (sockfd = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
     perror("socket()");
