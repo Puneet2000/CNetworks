@@ -135,7 +135,14 @@ void setip(int fd , char ip[]){
 		 if (ioctl(s, SIOCSIFADDR, (caddr_t) &ifr) == -1)
         perror("ioctl() - SIOCSIFADDR");
         exit(1);
-	}}
+	}
+
+	if (ioctl(s, SIOCGIFFLAGS, &ifr) == -1)
+		perror("ioctl() - SIOCGIFFLAGS");
+	ifr.ifr_flags |= (IFF_UP | IFF_RUNNING);
+	if (ioctl(s, SIOCSIFFLAGS, &ifr) == -1)
+		perror("ioctl() - SIOCSIFFLAGS");
+}
 
 int main(int argc, char *argv[]) {
   
@@ -209,8 +216,9 @@ int main(int argc, char *argv[]) {
     exit(1);
   }
  
-  setip(tapfd);
+  
 printf("Successfully connected to interface %s\n", if_name);
+// setip(tapfd,ip);
 
 
   if ( (sockfd = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
