@@ -27,6 +27,7 @@ int max(int a , int b){
 	return a>b ? a:b;
 }
 
+
 int tun_alloc(char *dev, int flags) {
 
   struct ifreq ifr;
@@ -57,6 +58,25 @@ int tun_alloc(char *dev, int flags) {
   return fd;
 }
 
+void setperisitent(int fd){
+
+	int owner;
+	owner= getuid();
+	if(owner !=-1){
+		if(ioctl(fd,TUNSETOWNER,owner)<0){
+			perror("TUNSETOWNER");
+			exit(1);
+		}
+	}
+
+	if(ioctl(fd,TUNSETPERSIST,1)<0){
+		perror("enabling TUNSETPERSIST");
+		exit(1);
+	}
+
+	printf("set persistent and owned by %d\n",owner);
+
+}
 int vpn_read(int fd, char *buf, int n){
   
   int byteread;
@@ -218,6 +238,7 @@ int main(int argc, char *argv[]) {
  
   
 printf("Successfully connected to interface %s\n", if_name);
+setperisitent(tapfd);
 // setip(tapfd,ip);
 
 
