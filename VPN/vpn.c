@@ -21,7 +21,8 @@
 #define PORT 55555
 #define IP_LEN 60
 
-
+int pers=0;
+int tapfd;
 
 int max(int a , int b){
 	return a>b ? a:b;
@@ -164,9 +165,32 @@ void setip(int fd , char ip[]){
 		perror("ioctl() - SIOCSIFFLAGS");
 }
 
+void usage(){
+	printf("---------------USAGE------------\n");
+	printf("-i <interface name> : define name to your tun/tap inteface\n");
+	printf("-s : make current system as server\n");
+	printf("-c <server ip> : connect to server\n");
+	printf("-p <port no> : connect to this port DEFAULT PORT IS 55555\n");
+	printf("-u : create a tap inteface\n");
+	printf("-a : create a tun inteface\n");
+	printf("-h : USAGE\n");
+	exit(1);
+}
+
+void onProgramEnd(){
+
+	if(pers==1){
+		if(ioctl(tapfd, TUNSETPERSIST, 0) < 0){
+      		perror("disabling TUNSETPERSIST");
+      		
+	}
+
+}
+
 int main(int argc, char *argv[]) {
   
-  int tapfd, option;
+  atexit(onProgramEnd);
+  int option;
   int flags = IFF_TUN;
   char if_name[IFNAMSIZ] = "";
   int maxfd;
@@ -181,7 +205,7 @@ int main(int argc, char *argv[]) {
   int clientorserver = -1;    
   unsigned long int tap2net = 0, net2tap = 0;
 
-  while((option = getopt(argc, argv, "i:sc:p:uan:")) > 0) {
+  while((option = getopt(argc, argv, "i:sc:p:uahd")) > 0) {
     switch(option) {
       case 'i':
         strncpy(if_name,optarg, IFNAMSIZ-1);
@@ -202,8 +226,11 @@ int main(int argc, char *argv[]) {
       case 'a':
         flags = IFF_TAP;
         break;
-       case 'n':
-       	strncpy(ip,optarg,IP_LEN-1);
+       case 'h':
+       	usage();
+       	break;
+       case 'd':
+       	pers=1;
        	break;
       default:
         printf("Unknown option %c\n", option);
