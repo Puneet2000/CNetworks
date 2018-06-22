@@ -5,7 +5,7 @@
 **Port Scanner :**
  - TCP connect , TCP Syn and UDP port scanner like nmap.
 
-**VPN :**
+**miniVPN :**
 - VPN using tun/tap interfaces . 
 - Under progress..... 
 

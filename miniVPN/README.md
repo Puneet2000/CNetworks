@@ -1,4 +1,4 @@
-## VPN
+## miniVPN
 
 ### Details :
 - This is a VPN program entirely wriiten in C using linux networking libraries.
